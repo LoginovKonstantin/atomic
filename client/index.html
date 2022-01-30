@@ -1,0 +1,108 @@
+<html>
+<head>
+  <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"
+          integrity="sha384-KAZ4DtjNhLChOB/hxXuKqhMLYvx3b5MlT55xPEiNmREKRzeEm+RVPlTnAn0ajQNs"
+          crossOrigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"
+          integrity="sha512-UNM1njAgOFUa74Z0bADwAq8gbTcqZC8Ej4xPSzpnh0l6KMevwvkBvbldF9uR++qKeJ+MOZHRjV1HZjoRvjDfNQ=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.25.0/axios.min.js"
+          integrity="sha512-/Q6t3CASm04EliI1QyIDAA/nDo9R8FQ/BULoUFyN4n/BDdyIxeH7u++Z+eobdmr11gG5D/6nPFyDlnisDwhpYA=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const port = 3000;
+    let socket, userId, myChart;
+
+    function connect() {
+      if (!socket) {
+        userId = uuid.v4()
+        socket = io(`http://localhost:${port}`, { query: { userId } });
+        registerEvents();
+        setById('status', 'Connect', 'green');
+      }
+    }
+
+    function disconnect() {
+      if (socket) {
+        socket.disconnect();
+        socket = userId = undefined;
+        setById('status', 'Disconnect', 'red')
+      }
+    }
+
+    function registerEvents() {
+      socket.on("connect", function() {
+        console.log("Connected");
+      });
+      socket.on("btc-usd:price", function(data) {
+        document.getElementById('price').innerHTML = data;
+        console.log("event", data);
+      });
+      socket.on("btc-usd:history:price", function(resp) {
+        if (myChart) {
+          myChart.destroy();
+        }
+        resp = resp.reverse();
+        const labels = resp.map(el => {
+          const d = new Date(el.time * 1000);
+          return d.getHours() + ':' + d.getMinutes() + ':' + d.getSeconds();
+        })
+        const data = {
+          labels: labels,
+          datasets: [{
+            label: 'BTC/USD',
+            backgroundColor: 'rgb(255, 99, 132)',
+            borderColor: 'rgb(255, 99, 132)',
+            data: resp.map(el => Number(el.price)),
+          }]
+        };
+
+        const config = {
+          type: 'line',
+          data: data,
+          options: {}
+        };
+        myChart = new Chart(
+          document.getElementById('myChart'),
+          config
+        );
+        console.log("event", data);
+      });
+      socket.on("disconnect", function() {
+        console.log("Disconnected");
+      });
+    }
+
+    function getBtcUsdPrice(minutes) {
+      const url = `http://localhost:${port}/api/btc-usd/price`;
+      if (!minutes) {
+        axios.get(`${url}?userId=${userId}`).then(r => console.log(r));
+        return;
+      }
+      axios.get(`${url}/${minutes}?userId=${userId}`).then(r => console.log(r));
+    }
+
+    function setById(el, value, color) {
+      document.getElementById(el).innerHTML = value;
+      if (color) {
+        document.getElementById(el).style.color = color;
+      }
+    }
+
+  </script>
+</head>
+
+<body onload="setById('status', 'Disconnect', 'red');">
+<p><label id="status"></label></p>
+<p><input type="button" value="Socket connect" onclick="connect()"></p>
+<p><input type="button" value="Socket disconnect" onclick="disconnect()"></p>
+<p><input type="button" value="Get btc/usd price" onclick="getBtcUsdPrice()"></p>
+<p><input type="button" value="Get btc/usd price last 15 minutes" onclick="getBtcUsdPrice(15)"></p>
+<p><input type="button" value="Get btc/usd price last 30 minutes" onclick="getBtcUsdPrice(30)"></p>
+<p><input type="button" value="Get btc/usd price last 60 minutes" onclick="getBtcUsdPrice(60)"></p>
+<div id="price"></div>
+<canvas id="myChart" width="400" height="400"></canvas>
+
+</body>
+</html>
